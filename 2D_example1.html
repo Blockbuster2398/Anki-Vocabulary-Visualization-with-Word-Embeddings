@@ -1,0 +1,52 @@
+<head>
+  <style> body { margin: 0; } 
+
+    #graph {
+      width: 50vw;
+      height: 60vh;
+    }
+
+  </style>
+
+  <script src="//cdn.jsdelivr.net/npm/force-graph"></script>
+  <!--<script src="../../dist/force-graph.js"></script>-->
+</head>
+
+<title> 
+    Anki Visualizer
+</title>
+
+<body>
+
+  <div id="graph"></div>
+
+  <header>  
+    This is a header for Anki Visualization!
+  </header>
+
+  <main>  This is main content </main>
+  
+  <area>
+    <script>
+    // Random tree
+    const N = 300;
+    const gData = {
+      nodes: [...Array(N).keys()].map(i => ({ id: i })),
+      links: [...Array(N).keys()]
+        .filter(id => id)
+        .map(id => ({
+          source: id,
+          target: Math.round(Math.random() * (id-1))
+        }))
+    };
+
+    const Graph = new ForceGraph()
+      (document.getElementById('graph'))
+        .linkDirectionalParticles(1)
+        .graphData(gData);
+    </script>
+  </area>
+
+
+  
+</body>

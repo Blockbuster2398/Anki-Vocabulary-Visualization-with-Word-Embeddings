@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width">
+        <title>Flexbox & Grid</title>
+        <link rel="stylesheet" href="style.css">
+        <script src="//cdn.jsdelivr.net/npm/force-graph"></script>
+        <script src="//cdn.jsdelivr.net/npm/3d-force-graph"></script>
+
+        <!--Imports the libraries that we will use later on in our code. All of the scripts in head run immediately-->
+
+    </head>
+    
+
+    <!--The body class contains the bulk of the page's content, and we decided to create a container class
+        that we can style later in css. Within the container is a header section, an aside, and another div that contains our graph-->
+    <body>
+        
+        <div class="container">
+            <header>
+                Header
+            </header>
+
+            <main>
+                <aside>
+                    Sidebar
+                    <h1>Text Embedder Test</h1>
+
+                    <!--<script type="module" src="get_embeddings.ts"></script>-->
+                    <!-- Node-only script; do not load in the browser. -->
+                    <script type="module" src="parse_col.js"></script>
+                </aside>
+                
+                <div 
+                id="3d-graph">
+                </div>
+            </main>
+        </div>
+
+        <!--This is a script that runs in the html section above-->
+            <script>
+                // Random tree
+                const N = 1000;
+                const gData = {
+                nodes: [...Array(N).keys()].map(i => ({ id: i })),
+                links: [...Array(N).keys()]
+                    .filter(id => id)
+                    .map(id => ({
+                    source: id,
+                    target: Math.round(Math.random() * (id-1))
+                    }))
+                };
+
+                const graphEl = document.getElementById('3d-graph');
+                if (graphEl) {
+                    const Graph = new ForceGraph3D(graphEl)
+                        .linkDirectionalParticles(1)
+                        .graphData(gData);
+                }
+            </script>
+
+            <!--This is also a script that runs in the html section above-->
+            <script>
+                // Random tree
+                const N2 = 3000;
+                const gData2 = {
+                nodes: [...Array(N).keys()].map(i => ({ id: i })),
+                links: [...Array(N).keys()]
+                    .filter(id => id)
+                    .map(id => ({
+                    source: id,
+                    target: Math.round(Math.random() * (id-1))
+                    }))
+                };
+
+                const Graph2 = new ForceGraph3D(document.getElementById('3d-graph'))
+                    .graphData(gData);
+            </script>
+        
+
+
+</body>
+</html>
