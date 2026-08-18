@@ -1,29 +1,10 @@
-
-//better-sqlite version
-/*if (typeof window !== "undefined" || typeof document !== "undefined") {
-  throw new Error("parse_col.js is a Node-only script and cannot be loaded in the browser. Use a browser-safe SQLite library like sql.js, or run this file in Node.");
-}
-
-import Database from "better-sqlite3";
-
-const db = new Database("app.db");
-
-const query = `
-    CREATE TABLE users (
-        id INTEGER PRIMARY KEY,
-        name STRING NOT NULL,
-        username STRING NOT NULL UNIQUE
-    )
-`;
-
-console.log("Column parse file run");
-db.exec(query);
-console.log("Column parse file run");*/
-
 import initSqlJs from "sql.js";
 import wasmUrl from "sql.js/dist/sql-wasm.wasm?url";
 
 async function loadSampleDatabase() {
+  
+  let formattedNotes = []
+  
   const SQL = await initSqlJs({
     locateFile: () => wasmUrl,
   });
@@ -39,15 +20,50 @@ async function loadSampleDatabase() {
 
   console.log("Loaded database");
 
-  const stmt = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'");
-  const cards = db.prepare("SELECT * FROM cards");
+  // Load all desired note/card information from the database
+  const notesTable = db.prepare("SELECT did as deck_id, nid as note_id, flds as fields, notes.mid as model_id, lapses FROM cards inner JOIN notes ON cards.nid = notes.id ORDER BY did, nid");
+
+  // Load all deck information from the deck ID to deck name mapping (json)
+  let modelsJson;
+  let decksJson;
   
-  
-  while (stmt.step()) {
-    console.log(stmt.getAsObject());
+  const collectionTable = db.prepare("SELECT * FROM col");
+  while (collectionTable.step()) {
+    // Object containing all information in the Anki col table
+    const collectionDetails = collectionTable.getAsObject();
+    // Parse the json string in the models column to get note id to fields mapping
+    modelsJson = JSON.parse(collectionDetails.models);
+    // Parse the json string in the decks column to get deck id to deck name mapping
+    decksJson = JSON.parse(collectionDetails.decks);
+    
+    console.log("Collection Note Models:", modelsJson);
+    console.log("Collection Decks:", decksJson);
   }
+  
+  while (notesTable.step()) {
+    const rawNote = notesTable.getAsObject();
+    const formattedNote = parseNote(rawNote, modelsJson, decksJson);
+    formattedNotes.push(formattedNote);
+  }
+
+  console.log(formattedNotes);
+
 }
+
+
 
 loadSampleDatabase().catch((error) => {
   console.error("Database load failed:", error);
 });
+
+
+
+function parseNote(rawNote, colModelJson, colDeckJson){
+  // Takes a raw note object and manually formats its note model and deck info information
+  console.log("(Before), ", rawNote, typeof rawNote.model_id);
+  rawNote.model_name = colModelJson[rawNote.model_id]["name"];
+
+  rawNote.deck_name = colDeckJson[rawNote.deck_id]["name"];
+  console.log("(After), ", rawNote);
+  return rawNote
+}
