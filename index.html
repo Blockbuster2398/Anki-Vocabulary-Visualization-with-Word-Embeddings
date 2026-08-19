@@ -19,66 +19,81 @@
         
         <div class="container">
             <header>
-                Header
+                <h1>Anki Vocab Visualizer</h1>
+
             </header>
 
             <main>
-                <aside>
-                    Sidebar
-                    <h1>Text Embedder Test</h1>
-
-                    <!--<script type="module" src="get_embeddings.ts"></script>-->
-                    <!-- Node-only script; do not load in the browser. -->
-                    <script type="module" src="parse_col.js"></script>
+                <aside id = "sidePanel">
+                    <h2>Status Panel</h2>
+                    <p id="statusMessage">Idle...</p>
+                    <p id="totalEmbeddedNotes">Total Embedded Notes:</p>
+                    <h3>Choose a deck to Display:</h3>
+                    <input id="deckChoice" type="text">
+                    <h3>Choose a field for card embedding:</h3>
+                    <input id="fieldChoice" type="text">
+                    <h3>Alternate Collection File:</h3>
+                    <input id="alternateCollectionChoice" type="file">
+                    <h3>Create Graph</h3>
+                    <button id="CreateGraphButton">Compute Graph</button>
+                    <script type="module" src="/main.js"></script>
+                    <!--
+                    <script type="module" src="/getEmbedding.ts"></script>
+                    <script type="module" src="parseCollection.js"></script>
+                    -->
                 </aside>
                 
                 <div 
-                id="3d-graph">
+                id="graph">
                 </div>
             </main>
         </div>
 
         <!--This is a script that runs in the html section above-->
             <script>
-                // Random tree
-                const N = 1000;
-                const gData = {
-                nodes: [...Array(N).keys()].map(i => ({ id: i })),
-                links: [...Array(N).keys()]
-                    .filter(id => id)
-                    .map(id => ({
-                    source: id,
-                    target: Math.round(Math.random() * (id-1))
-                    }))
-                };
+                dimension = 2;
+                if (dimension == 3) {
+                    // Random tree
+                    const N = 1000;
+                    const gData = {
+                    nodes: [...Array(N).keys()].map(i => ({ id: i })),
+                    links: [...Array(N).keys()]
+                        .filter(id => id)
+                        .map(id => ({
+                        source: id,
+                        target: Math.round(Math.random() * (id-1))
+                        }))
+                    };
 
-                const graphEl = document.getElementById('3d-graph');
-                if (graphEl) {
-                    const Graph = new ForceGraph3D(graphEl)
-                        .linkDirectionalParticles(1)
-                        .graphData(gData);
+                    const graphEl = document.getElementById('graph');
+                    if (graphEl) {
+                        const Graph = new ForceGraph3D(graphEl)
+                            .linkDirectionalParticles(1)
+                            .graphData(gData);
+                    }
                 }
+                else if (dimension == 2) {
+                    // Random tree
+                    const N = 1000;
+                    const gData = {
+                    nodes: [...Array(N).keys()].map(i => ({ id: i })),
+                    links: [...Array(N).keys()]
+                        .filter(id => id)
+                        .map(id => ({
+                        source: id,
+                        target: Math.round(Math.random() * (id-1))
+                        }))
+                    };
+
+                    const graphEl = document.getElementById('graph');
+                    if (graphEl) {
+                        const Graph = new ForceGraph(graphEl)
+                            .linkDirectionalParticles(1)
+                            .graphData(gData);
+                    }
+                }
+
+                
             </script>
-
-            <!--This is also a script that runs in the html section above-->
-            <script>
-                // Random tree
-                const N2 = 3000;
-                const gData2 = {
-                nodes: [...Array(N).keys()].map(i => ({ id: i })),
-                links: [...Array(N).keys()]
-                    .filter(id => id)
-                    .map(id => ({
-                    source: id,
-                    target: Math.round(Math.random() * (id-1))
-                    }))
-                };
-
-                const Graph2 = new ForceGraph3D(document.getElementById('3d-graph'))
-                    .graphData(gData);
-            </script>
-        
-
-
-</body>
+    </body>
 </html>

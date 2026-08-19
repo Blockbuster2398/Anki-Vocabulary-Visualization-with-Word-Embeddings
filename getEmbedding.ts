@@ -1,9 +1,10 @@
 import {
+    Embedding,
     FilesetResolver,
     TextEmbedder
 } from "@mediapipe/tasks-text";
 
-let textEmbedder: TextEmbedder;
+let textEmbedder: TextEmbedder | null = null;
 
 async function createEmbedder() {
     console.log("Loading MediaPipe...");
@@ -21,19 +22,24 @@ async function createEmbedder() {
                 modelAssetPath:
                     "https://storage.googleapis.com/mediapipe-tasks/text_embedder/universal_sentence_encoder.tflite"
             },
-            quantize: true
+            quantize: false
         }
     );
-    // Embedding logic goes here
+
     console.log("Text embedder created!");
-
-    const result1 = textEmbedder.embed("Pick it up").embeddings[0]
-    const result2 = textEmbedder.embed("Winter breeze").embeddings[0]
-    console.log("Embedding:", result1.quantizedEmbedding);
-    console.log("Embedding:", result1.quantizedEmbedding);
-    const similarity = TextEmbedder.cosineSimilarity(result1, result2)
-    console.log(similarity)
-
 }
 
-createEmbedder();
+export async function getEmbedding(expression: string) {
+    // Create the model if it hasn't been created yet
+    if (!textEmbedder) {
+        await createEmbedder();
+    }
+    if (textEmbedder === null) {
+        throw new Error("Failed to initialize TextEmbedder");
+    }
+    return textEmbedder.embed(expression);
+}
+
+export function getCosineSimilarity(embedding1: Embedding, embedding2: Embedding){
+    return TextEmbedder.cosineSimilarity(embedding1, embedding2)
+}

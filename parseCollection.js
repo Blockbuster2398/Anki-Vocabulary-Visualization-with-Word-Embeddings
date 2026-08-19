@@ -1,7 +1,7 @@
 import initSqlJs from "sql.js";
 import wasmUrl from "sql.js/dist/sql-wasm.wasm?url";
 
-async function loadSampleDatabase() {
+export async function parseCollection() {
   
   let formattedNotes = []
   
@@ -18,7 +18,7 @@ async function loadSampleDatabase() {
   const buffer = await response.arrayBuffer();
   const db = new SQL.Database(new Uint8Array(buffer));
 
-  console.log("Loaded database");
+  //console.log("Loaded database");
 
   // Load all desired note/card information from the database
   const notesTable = db.prepare("SELECT did as deck_id, nid as note_id, flds as fields, notes.mid as model_id, lapses FROM cards inner JOIN notes ON cards.nid = notes.id ORDER BY did, nid");
@@ -36,8 +36,8 @@ async function loadSampleDatabase() {
     // Parse the json string in the decks column to get deck id to deck name mapping
     decksJson = JSON.parse(collectionDetails.decks);
     
-    console.log("Collection Note Models:", modelsJson);
-    console.log("Collection Decks:", decksJson);
+    //console.log("Collection Note Models:", modelsJson);
+    //console.log("Collection Decks:", decksJson);
   }
   
   while (notesTable.step()) {
@@ -46,24 +46,21 @@ async function loadSampleDatabase() {
     formattedNotes.push(formattedNote);
   }
 
-  console.log(formattedNotes);
-
+  //console.log(formattedNotes);
+  return formattedNotes
 }
 
 
 
-loadSampleDatabase().catch((error) => {
+parseCollection().catch((error) => {
   console.error("Database load failed:", error);
 });
 
-
-
 function parseNote(rawNote, colModelJson, colDeckJson){
   // Takes a raw note object and manually formats its note model and deck info information
-  console.log("(Before), ", rawNote, typeof rawNote.model_id);
+  //console.log("(Before), ", rawNote, typeof rawNote.model_id);
   rawNote.model_name = colModelJson[rawNote.model_id]["name"];
-
   rawNote.deck_name = colDeckJson[rawNote.deck_id]["name"];
-  console.log("(After), ", rawNote);
+  //console.log("(After), ", rawNote);
   return rawNote
 }
