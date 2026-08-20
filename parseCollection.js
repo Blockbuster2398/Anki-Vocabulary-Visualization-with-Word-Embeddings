@@ -9,7 +9,10 @@ export async function parseCollection() {
     locateFile: () => wasmUrl,
   });
 
-  const response = await fetch("/collection.sqlite");
+  //const response = await fetch("/collection.sqlite");
+  const response = await fetch("/simpleChinese.sqlite");
+  //const response = await fetch("/simpleSpanish.sqlite");
+
 
   if (!response.ok) {
     throw new Error(`Failed to load /collection.sqlite: ${response.status} ${response.statusText}`);
@@ -50,17 +53,39 @@ export async function parseCollection() {
   return formattedNotes
 }
 
-
-
 parseCollection().catch((error) => {
   console.error("Database load failed:", error);
 });
+
+export function sanitizeFields(fieldStr) {
+  // Anki fields can contain repeated HTML, escaped newlines, and cloze markers.
+  fieldStr = fieldStr
+    .replace(/'/g, " ")
+    .replace(/\\n|\r?\n/g, " ")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/{{c\d+::/gi, " ")
+  //fieldStr = fieldStr.replace("\u001F", " ")  //removes \x1F
+  ////fieldStr = re.sub("\[sound:.*?\]", " ", content)  //extract title of
+  //images (usually OCRed text) before html is removed
+  ////fieldStr = re.sub("paste-.*?\....", "", content)
+  ////fieldStr = re.sub("title=(\".*?\")", ">OCR:\\1<", content)  //extract
+  //title of images (usually OCR'd text) before html is removed
+  ////fieldStr = re.sub("<.*?>", " ", content)  //removes all html
+  ////fieldStr = re.sub("{{c\d+::", "", content)  //removes clozing
+  fieldStr = fieldStr.replace(/}}/g, " ")  //replace clozing with a space
+  fieldStr = fieldStr.replace(/::/g, " ")  //part of clozing + punct
+  fieldStr = fieldStr.replace(/&nbsp;/g, " ")  //html spaces
+  fieldStr = fieldStr.replace(/\//g, " ")  //slash
+  return fieldStr
+}
 
 function parseNote(rawNote, colModelJson, colDeckJson){
   // Takes a raw note object and manually formats its note model and deck info information
   //console.log("(Before), ", rawNote, typeof rawNote.model_id);
   rawNote.model_name = colModelJson[rawNote.model_id]["name"];
   rawNote.deck_name = colDeckJson[rawNote.deck_id]["name"];
+  rawNote.fields = sanitizeFields(rawNote.fields)
   //console.log("(After), ", rawNote);
   return rawNote
 }
+

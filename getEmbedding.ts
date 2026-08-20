@@ -21,8 +21,9 @@ async function createEmbedder() {
             baseOptions: {
                 modelAssetPath:
                     "https://storage.googleapis.com/mediapipe-tasks/text_embedder/universal_sentence_encoder.tflite"
+                    //"https://storage.googleapis.com/mediapipe-models/text_embedder/bert_embedder/float32/1/bert_embedder.tflite"
             },
-            quantize: false
+            quantize: true
         }
     );
 
