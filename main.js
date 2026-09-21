@@ -149,8 +149,12 @@ async function drawGraph3D(noteArray, embeddingArray, inLinks, outLinks, linkStr
 
     //console.log(inLinks)
     //console.log(outLinks)
+    const intervals = embeddingArray.map((_, index) => Number(noteArray[index].interval))
+    const validIntervals = intervals.filter(Number.isFinite)
+    const minInterval = validIntervals.length ? Math.min(...validIntervals) : 0
+    const maxInterval = validIntervals.length ? Math.max(...validIntervals) : 0
     const gData = {
-    nodes: [...embeddingArray.keys()].map(i => ({ id: i })),
+    nodes: [...embeddingArray.keys()].map(i => ({ id: i, interval: intervals[i] })),
     links: inLinks.map((source, index) => ({
         source,
         target: outLinks[index],
@@ -168,7 +172,15 @@ async function drawGraph3D(noteArray, embeddingArray, inLinks, outLinks, linkStr
             .graphData(gData)
             .nodeId('id')
             .backgroundColor('rgb(255, 255, 255)')
-            .nodeColor(node => 'rgb(0, 255, 0)')
+            .nodeColor(node => {
+                const interval = Number(node.interval)
+                const relativeInterval = maxInterval > minInterval && Number.isFinite(interval)
+                    ? (interval - minInterval) / (maxInterval - minInterval)
+                    : 0.5
+                const red = Math.round(255 * (1 - relativeInterval))
+                const green = Math.round(255 * relativeInterval)
+                return `rgb(${red}, ${green}, 0)`
+            })
             //.nodeColor(node => '')
             .nodeThreeObject(node => {
                 //const sprite = new SpriteText(node.id)
