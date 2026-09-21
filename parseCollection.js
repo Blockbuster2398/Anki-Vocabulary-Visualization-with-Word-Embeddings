@@ -24,7 +24,7 @@ export async function parseCollection() {
   //console.log("Loaded database");
 
   // Load all desired note/card information from the database
-  const notesTable = db.prepare("SELECT did as deck_id, nid as note_id, flds as fields, notes.mid as model_id, lapses FROM cards inner JOIN notes ON cards.nid = notes.id ORDER BY did, nid");
+  const notesTable = db.prepare("SELECT did as deck_id, nid as note_id, flds as fields, notes.mid as model_id, lapses, ivl as interval FROM cards inner JOIN notes ON cards.nid = notes.id ORDER BY did, nid");
 
   // Load all deck information from the deck ID to deck name mapping (json)
   let modelsJson;
