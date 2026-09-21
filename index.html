@@ -44,8 +44,19 @@
                     </select>
                     <label for="NoteOrderChoice">Note order</label>
                     <select id="NoteOrderChoice">
-                        <option value="deck">Deck order</option>
                         <option value="random">Random order</option>
+                        <option value="deck">Deck order</option>
+                    </select>
+                    <label for="EmbeddingModelChoice">Embedding model</label>
+                    <select id="EmbeddingModelChoice">
+                        <option value="Xenova/paraphrase-multilingual-MiniLM-L12-v2">Multilingual MiniLM L12</option>
+                        <option value="Xenova/multilingual-e5-small">Multilingual E5 small</option>
+                    </select>
+                    <label for="ProjectionChoice">Random projection</label>
+                    <select id="ProjectionChoice">
+                        <option value="0">None (384 dimensions)</option>
+                        <option value="128">128 dimensions</option>
+                        <option value="64">64 dimensions</option>
                     </select>
                     <script type="module" src="/main.js"></script>
                     <!--

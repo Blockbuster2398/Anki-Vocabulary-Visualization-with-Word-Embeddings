@@ -16,6 +16,9 @@ const CreateGraphButton = document.getElementById("CreateGraphButton");
 const PauseGraphButton = document.getElementById("PauseGraphButton");
 const ColorModeChoice = document.getElementById("ColorModeChoice");
 const NoteOrderChoice = document.getElementById("NoteOrderChoice");
+const EmbeddingModelChoice = document.getElementById("EmbeddingModelChoice");
+const ProjectionChoice = document.getElementById("ProjectionChoice");
+const projectionMatrixCache = new Map();
 let computationState = null;
 let activeGraphState = null;
 
@@ -64,6 +67,8 @@ CreateGraphButton.addEventListener("click", async () => {
     const selectedDeck = deckInput.value;
     const selectedField = fieldInput.value;
     const alternateCollection = alternateCollectionInput.value;
+    const selectedModel = EmbeddingModelChoice.value;
+    const projectionDimensions = Number(ProjectionChoice.value);
     const processingNotes = NoteOrderChoice.value === "random"
         ? shuffleNotes(noteArr)
         : [...noteArr];
@@ -78,49 +83,55 @@ CreateGraphButton.addEventListener("click", async () => {
     const graphUpdateInterval = 50;
     const noteLimit = Math.min(9000, processingNotes.length);
 
-    for (let i = 0; i < noteLimit; i++) {
-        await waitForResume(computationState);
-        const noteContent = processingNotes[i].fields;
-        const embeddingText = noteContent.split("\u001f")[1];
-        let noteEmbedding = embeddingCache.get(embeddingText);
-        if (!noteEmbedding) {
-            const embedding = await getEmbedding(embeddingText);
-            noteEmbedding = embedding.embeddings[0];
-            embeddingCache.set(embeddingText, noteEmbedding);
-        }
-        embeddingArr.push(noteEmbedding);
-
-        const nearestNeighbors = [];
-        for (let j = 0; j < i; j++) {
-            const candidate = {
-                similarity: getCosineSimilarity(embeddingArr[i], embeddingArr[j]),
-                index: j
-            };
-            const insertionIndex = nearestNeighbors.findIndex(
-                neighbor => candidate.similarity > neighbor.similarity
-            );
-            if (insertionIndex === -1 && nearestNeighbors.length < totalNeighbors) {
-                nearestNeighbors.push(candidate);
-            } else if (insertionIndex !== -1) {
-                nearestNeighbors.splice(insertionIndex, 0, candidate);
+    try {
+        for (let i = 0; i < noteLimit; i++) {
+            await waitForResume(computationState);
+            const noteContent = processingNotes[i].fields;
+            const embeddingText = noteContent.split("\u001f")[1];
+            const embeddingCacheKey = `${selectedModel}\u0000${projectionDimensions}\u0000${embeddingText}`;
+            let noteEmbedding = embeddingCache.get(embeddingCacheKey);
+            if (!noteEmbedding) {
+                const embedding = await getEmbedding(embeddingText, selectedModel);
+                noteEmbedding = projectEmbedding(embedding.embeddings[0], projectionDimensions);
+                embeddingCache.set(embeddingCacheKey, noteEmbedding);
             }
-            if (nearestNeighbors.length > totalNeighbors) {
-                nearestNeighbors.pop();
+            embeddingArr.push(noteEmbedding);
+
+            const nearestNeighbors = [];
+            for (let j = 0; j < i; j++) {
+                const candidate = {
+                    similarity: getCosineSimilarity(embeddingArr[i], embeddingArr[j]),
+                    index: j
+                };
+                const insertionIndex = nearestNeighbors.findIndex(
+                    neighbor => candidate.similarity > neighbor.similarity
+                );
+                if (insertionIndex === -1 && nearestNeighbors.length < totalNeighbors) {
+                    nearestNeighbors.push(candidate);
+                } else if (insertionIndex !== -1) {
+                    nearestNeighbors.splice(insertionIndex, 0, candidate);
+                }
+                if (nearestNeighbors.length > totalNeighbors) {
+                    nearestNeighbors.pop();
+                }
             }
-        }
 
-        for (const neighbor of nearestNeighbors) {
-            linkArrIn.push(i);
-            linkArrOut.push(neighbor.index);
-            linkStrengthArr.push(neighbor.similarity);
-        }
+            for (const neighbor of nearestNeighbors) {
+                linkArrIn.push(i);
+                linkArrOut.push(neighbor.index);
+                linkStrengthArr.push(neighbor.similarity);
+            }
 
-        if ((i + 1) % graphUpdateInterval === 0 || i === noteLimit - 1) {
-            updateGraph3D(graphState, processingNotes, embeddingArr, linkArrIn, linkArrOut, linkStrengthArr);
+            if ((i + 1) % graphUpdateInterval === 0 || i === noteLimit - 1) {
+                updateGraph3D(graphState, processingNotes, embeddingArr, linkArrIn, linkArrOut, linkStrengthArr);
+            }
+            document.getElementById("totalEmbeddedNotes").innerHTML = "Total Embedded Notes " + (i + 1);
+            document.getElementById("statusMessage").innerHTML = "Embedding and linking note " + (i + 1) + "...";
+            await new Promise(resolve => requestAnimationFrame(resolve));
         }
-        document.getElementById("totalEmbeddedNotes").innerHTML = "Total Embedded Notes " + (i + 1);
-        document.getElementById("statusMessage").innerHTML = "Embedding and linking note " + (i + 1) + "...";
-        await new Promise(resolve => requestAnimationFrame(resolve));
+    } catch (error) {
+        console.error("Embedding failed:", error);
+        document.getElementById("statusMessage").innerHTML = "Embedding failed. Check the browser console.";
     }
 
     graphState.stopAnimation();
@@ -139,6 +150,44 @@ function shuffleNotes(notes) {
         ];
     }
     return shuffledNotes;
+}
+
+function projectEmbedding(embedding, outputDimensions) {
+    if (!outputDimensions || outputDimensions >= embedding.length) {
+        return embedding;
+    }
+
+    const cacheKey = `${embedding.length}->${outputDimensions}`;
+    let projectionMatrix = projectionMatrixCache.get(cacheKey);
+    if (!projectionMatrix) {
+        projectionMatrix = createProjectionMatrix(embedding.length, outputDimensions);
+        projectionMatrixCache.set(cacheKey, projectionMatrix);
+    }
+
+    const projectedEmbedding = new Array(outputDimensions).fill(0);
+    for (let outputIndex = 0; outputIndex < outputDimensions; outputIndex++) {
+        for (let inputIndex = 0; inputIndex < embedding.length; inputIndex++) {
+            projectedEmbedding[outputIndex] += embedding[inputIndex] * projectionMatrix[outputIndex][inputIndex];
+        }
+    }
+    return projectedEmbedding;
+}
+
+function createProjectionMatrix(inputDimensions, outputDimensions) {
+    let seed = 0x6d2b79f5 + outputDimensions;
+    const nextRandom = () => {
+        seed += 0x6d2b79f5;
+        let value = seed;
+        value = Math.imul(value ^ (value >>> 15), value | 1);
+        value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+        return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+    };
+    const scale = 1 / Math.sqrt(outputDimensions);
+    return Array.from({ length: outputDimensions }, () =>
+        Float32Array.from({ length: inputDimensions }, () =>
+            (nextRandom() < 0.5 ? -1 : 1) * scale
+        )
+    );
 }
 
 function waitForResume(state) {

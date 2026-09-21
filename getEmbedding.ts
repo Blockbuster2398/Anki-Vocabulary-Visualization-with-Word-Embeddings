@@ -6,21 +6,26 @@ type FeatureExtractor = (text: string, options: {
 }) => Promise<{ data: Float32Array }>;
 
 let textEmbedder: FeatureExtractor | null = null;
+let loadedModel: string | null = null;
 
-async function createEmbedder() {
-    console.log("Loading multilingual embedding model...");
+async function createEmbedder(modelName: string) {
+    console.log(`Loading multilingual embedding model: ${modelName}`);
     textEmbedder = await pipeline(
         "feature-extraction",
-        "Xenova/paraphrase-multilingual-MiniLM-L12-v2",
+        modelName,
         { dtype: "q8" }
     ) as unknown as FeatureExtractor;
-    console.log("Multilingual embedding model created!");
+    loadedModel = modelName;
+    console.log(`Multilingual embedding model created: ${modelName}`);
 }
 
-export async function getEmbedding(expression: string) {
+export async function getEmbedding(
+    expression: string,
+    modelName = "Xenova/paraphrase-multilingual-MiniLM-L12-v2"
+) {
     // Create the model if it hasn't been created yet
-    if (!textEmbedder) {
-        await createEmbedder();
+    if (!textEmbedder || loadedModel !== modelName) {
+        await createEmbedder(modelName);
     }
     if (textEmbedder === null) {
         throw new Error("Failed to initialize TextEmbedder");
