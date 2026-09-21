@@ -1,33 +1,20 @@
-import {
-    Embedding,
-    FilesetResolver,
-    TextEmbedder
-} from "@mediapipe/tasks-text";
+import { pipeline } from "@huggingface/transformers";
 
-let textEmbedder: TextEmbedder | null = null;
+type FeatureExtractor = (text: string, options: {
+    pooling: "mean";
+    normalize: boolean;
+}) => Promise<{ data: Float32Array }>;
+
+let textEmbedder: FeatureExtractor | null = null;
 
 async function createEmbedder() {
-    console.log("Loading MediaPipe...");
-
-    const textFiles = await FilesetResolver.forTextTasks(
-        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-text/wasm"
-    );
-
-    console.log("WASM loaded.");
-
-    textEmbedder = await TextEmbedder.createFromOptions(
-        textFiles,
-        {
-            baseOptions: {
-                modelAssetPath:
-                    "https://storage.googleapis.com/mediapipe-tasks/text_embedder/universal_sentence_encoder.tflite"
-                    //"https://storage.googleapis.com/mediapipe-models/text_embedder/bert_embedder/float32/1/bert_embedder.tflite"
-            },
-            quantize: true
-        }
-    );
-
-    console.log("Text embedder created!");
+    console.log("Loading multilingual embedding model...");
+    textEmbedder = await pipeline(
+        "feature-extraction",
+        "Xenova/paraphrase-multilingual-MiniLM-L12-v2",
+        { dtype: "q8" }
+    ) as unknown as FeatureExtractor;
+    console.log("Multilingual embedding model created!");
 }
 
 export async function getEmbedding(expression: string) {
@@ -38,9 +25,23 @@ export async function getEmbedding(expression: string) {
     if (textEmbedder === null) {
         throw new Error("Failed to initialize TextEmbedder");
     }
-    return textEmbedder.embed(expression);
+    const embedding = await textEmbedder(expression, {
+        pooling: "mean",
+        normalize: true
+    });
+    return { embeddings: [Array.from(embedding.data)] };
 }
 
-export function getCosineSimilarity(embedding1: Embedding, embedding2: Embedding){
-    return TextEmbedder.cosineSimilarity(embedding1, embedding2)
+export function getCosineSimilarity(embedding1: number[], embedding2: number[]) {
+    let dotProduct = 0;
+    let magnitude1 = 0;
+    let magnitude2 = 0;
+
+    for (let index = 0; index < embedding1.length; index++) {
+        dotProduct += embedding1[index] * embedding2[index];
+        magnitude1 += embedding1[index] ** 2;
+        magnitude2 += embedding2[index] ** 2;
+    }
+
+    return dotProduct / (Math.sqrt(magnitude1) * Math.sqrt(magnitude2));
 }

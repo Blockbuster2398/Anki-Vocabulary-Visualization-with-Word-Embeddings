@@ -10,7 +10,7 @@ export async function parseCollection() {
   });
 
   //const response = await fetch("/collection.sqlite");
-  const response = await fetch("/simpleChineseIntervals.sqlite");
+  const response = await fetch("/mySimpleChinese.sqlite");
   //const response = await fetch("/simpleSpanish.sqlite");
 
 

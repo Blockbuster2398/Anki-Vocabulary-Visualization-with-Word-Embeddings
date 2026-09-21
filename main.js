@@ -13,8 +13,49 @@ const deckInput = document.getElementById("deckChoice");
 const fieldInput = document.getElementById("fieldChoice");
 const alternateCollectionInput = document.getElementById("alternateCollectionChoice");
 const CreateGraphButton = document.getElementById("CreateGraphButton");
+const PauseGraphButton = document.getElementById("PauseGraphButton");
+const ColorModeChoice = document.getElementById("ColorModeChoice");
+const NoteOrderChoice = document.getElementById("NoteOrderChoice");
+let computationState = null;
+let activeGraphState = null;
+
+ColorModeChoice.addEventListener("change", () => {
+    if (activeGraphState) {
+        activeGraphState.setColorMode(ColorModeChoice.value);
+    }
+});
+
+PauseGraphButton.addEventListener("click", () => {
+    if (!computationState) {
+        return;
+    }
+
+    computationState.paused = !computationState.paused;
+    PauseGraphButton.textContent = computationState.paused ? "Resume" : "Pause";
+    document.getElementById("statusMessage").innerHTML = computationState.paused
+        ? "Paused"
+        : "Creating embeddings...";
+
+    if (!computationState.paused) {
+        for (const resolve of computationState.resumeResolvers) {
+            resolve();
+        }
+        computationState.resumeResolvers.clear();
+    }
+});
 
 CreateGraphButton.addEventListener("click", async () => {
+    if (computationState) {
+        return;
+    }
+
+    computationState = {
+        paused: false,
+        resumeResolvers: new Set()
+    };
+    PauseGraphButton.disabled = false;
+    PauseGraphButton.textContent = "Pause";
+
     embeddingArr.length = 0;
     linkStrengthArr.length = 0;
     linkArrIn.length = 0;
@@ -23,19 +64,24 @@ CreateGraphButton.addEventListener("click", async () => {
     const selectedDeck = deckInput.value;
     const selectedField = fieldInput.value;
     const alternateCollection = alternateCollectionInput.value;
+    const processingNotes = NoteOrderChoice.value === "random"
+        ? shuffleNotes(noteArr)
+        : [...noteArr];
     console.log(selectedDeck, selectedField, alternateCollection);
 
     document.getElementById("statusMessage").innerHTML = "Creating embeddings...";
     document.getElementById("totalEmbeddedNotes").innerHTML = "Total Embedded Notes 0";
 
-    const graphState = createGraph3D(noteArr);
-    const totalNeighbors = 3;
-    const graphUpdateInterval = 10;
-    const noteLimit = Math.min(3000, noteArr.length);
+    const graphState = createGraph3D(processingNotes);
+    activeGraphState = graphState;
+    const totalNeighbors = 2;
+    const graphUpdateInterval = 50;
+    const noteLimit = Math.min(9000, processingNotes.length);
 
     for (let i = 0; i < noteLimit; i++) {
-        const noteContent = noteArr[i].fields;
-        const embeddingText = noteContent.split("\u001f")[5];
+        await waitForResume(computationState);
+        const noteContent = processingNotes[i].fields;
+        const embeddingText = noteContent.split("\u001f")[1];
         let noteEmbedding = embeddingCache.get(embeddingText);
         if (!noteEmbedding) {
             const embedding = await getEmbedding(embeddingText);
@@ -70,7 +116,7 @@ CreateGraphButton.addEventListener("click", async () => {
         }
 
         if ((i + 1) % graphUpdateInterval === 0 || i === noteLimit - 1) {
-            updateGraph3D(graphState, noteArr, embeddingArr, linkArrIn, linkArrOut, linkStrengthArr);
+            updateGraph3D(graphState, processingNotes, embeddingArr, linkArrIn, linkArrOut, linkStrengthArr);
         }
         document.getElementById("totalEmbeddedNotes").innerHTML = "Total Embedded Notes " + (i + 1);
         document.getElementById("statusMessage").innerHTML = "Embedding and linking note " + (i + 1) + "...";
@@ -79,10 +125,35 @@ CreateGraphButton.addEventListener("click", async () => {
 
     graphState.stopAnimation();
     document.getElementById("statusMessage").innerHTML = "Idle...";
+    PauseGraphButton.disabled = true;
+    computationState = null;
 });
+
+function shuffleNotes(notes) {
+    const shuffledNotes = [...notes];
+    for (let index = shuffledNotes.length - 1; index > 0; index--) {
+        const randomIndex = Math.floor(Math.random() * (index + 1));
+        [shuffledNotes[index], shuffledNotes[randomIndex]] = [
+            shuffledNotes[randomIndex],
+            shuffledNotes[index]
+        ];
+    }
+    return shuffledNotes;
+}
+
+function waitForResume(state) {
+    if (!state.paused) {
+        return Promise.resolve();
+    }
+
+    return new Promise(resolve => {
+        state.resumeResolvers.add(resolve);
+    });
+}
 
 function createGraph3D(noteArray) {
     const gData = { nodes: [], links: [] };
+    let colorMode = ColorModeChoice.value;
     const graphEl = document.getElementById("graph");
     graphEl.replaceChildren();
 
@@ -93,17 +164,25 @@ function createGraph3D(noteArray) {
         .backgroundColor("rgb(255, 255, 255)")
         .nodeColor(node => {
             const interval = Number(node.interval);
-            const intervals = gData.nodes
-                .map(currentNode => Number(currentNode.interval))
-                .filter(Number.isFinite);
-            const minInterval = intervals.length ? Math.min(...intervals) : 0;
-            const maxInterval = intervals.length ? Math.max(...intervals) : 0;
-            const relativeInterval = maxInterval > minInterval && Number.isFinite(interval)
-                ? (interval - minInterval) / (maxInterval - minInterval)
-                : 0.5;
-            const red = Math.round(255 * (1 - relativeInterval));
-            const green = Math.round(255 * relativeInterval);
-            return `rgb(${red}, ${green}, 0)`;
+            if (colorMode === "gradient") {
+                const rankedIntervals = [...new Set(gData.nodes
+                    .map(currentNode => Number(currentNode.interval))
+                    .filter(Number.isFinite))].sort((first, second) => first - second);
+                const intervalRank = rankedIntervals.indexOf(interval);
+                const relativeInterval = intervalRank > -1 && rankedIntervals.length > 1
+                    ? intervalRank / (rankedIntervals.length - 1)
+                    : 0;
+                const red = Math.round(255 * (1 - relativeInterval));
+                const green = Math.round(255 * relativeInterval);
+                return `rgb(${red}, ${green}, 0)`;
+            }
+            if (Number.isFinite(interval) && interval >= 21) {
+                return "rgb(0, 200, 0)";
+            }
+            if (Number.isFinite(interval) && interval >= 1) {
+                return "rgb(255, 200, 0)";
+            }
+            return "rgb(220, 0, 0)";
         })
         .nodeThreeObject(node => {
             const sprite = new SpriteText(noteArray[node.id].fields.split("\u001f")[1]);
@@ -157,6 +236,13 @@ function createGraph3D(noteArray) {
     return {
         Graph,
         gData,
+        setColorMode: mode => {
+            colorMode = mode;
+            Graph.graphData({
+                nodes: [...gData.nodes],
+                links: [...gData.links]
+            });
+        },
         stopAnimation: () => {
             animating = false;
         }

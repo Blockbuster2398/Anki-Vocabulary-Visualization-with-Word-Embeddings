@@ -1,9 +1,7 @@
 {
   
   "dependencies": {
-  
-    
-  "@mediapipe/tasks-text": "^1.0.1",
+  "@huggingface/transformers": "^3.7.2",
   
     
   "sql.js": "^1.14.2"

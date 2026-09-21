@@ -36,6 +36,17 @@
                     <input id="alternateCollectionChoice" type="file">
                     <h3>Create Graph</h3>
                     <button id="CreateGraphButton">Compute Graph</button>
+                    <button id="PauseGraphButton" type="button" disabled>Pause</button>
+                    <label for="ColorModeChoice">Node coloring</label>
+                    <select id="ColorModeChoice">
+                        <option value="bands">Interval bands</option>
+                        <option value="gradient">Red-green gradient</option>
+                    </select>
+                    <label for="NoteOrderChoice">Note order</label>
+                    <select id="NoteOrderChoice">
+                        <option value="deck">Deck order</option>
+                        <option value="random">Random order</option>
+                    </select>
                     <script type="module" src="/main.js"></script>
                     <!--
                     <script type="module" src="/getEmbedding.ts"></script>
