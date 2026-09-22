@@ -1,4 +1,4 @@
-import { getEmbedding, getCosineSimilarity } from "./getEmbedding";
+import { getCosineSimilarity } from "./getEmbedding";
 import { parseCollection } from "./parseCollection";
 import SpriteText from "https://esm.sh/three-spritetext";
 
@@ -19,8 +19,33 @@ const NoteOrderChoice = document.getElementById("NoteOrderChoice");
 const EmbeddingModelChoice = document.getElementById("EmbeddingModelChoice");
 const ProjectionChoice = document.getElementById("ProjectionChoice");
 const projectionMatrixCache = new Map();
+const embeddingWorker = new Worker(new URL("./embeddingWorker.ts", import.meta.url), { type: "module" });
+const pendingEmbeddingRequests = new Map();
+let nextEmbeddingRequestId = 0;
 let computationState = null;
 let activeGraphState = null;
+
+embeddingWorker.addEventListener("message", event => {
+    const { id, embedding, error } = event.data;
+    const request = pendingEmbeddingRequests.get(id);
+    if (!request) {
+        return;
+    }
+
+    pendingEmbeddingRequests.delete(id);
+    if (error) {
+        request.reject(new Error(error));
+    } else {
+        request.resolve(embedding);
+    }
+});
+
+embeddingWorker.addEventListener("error", error => {
+    for (const request of pendingEmbeddingRequests.values()) {
+        request.reject(error.error || new Error(error.message));
+    }
+    pendingEmbeddingRequests.clear();
+});
 
 ColorModeChoice.addEventListener("change", () => {
     if (activeGraphState) {
@@ -80,8 +105,9 @@ CreateGraphButton.addEventListener("click", async () => {
     const graphState = createGraph3D(processingNotes);
     activeGraphState = graphState;
     const totalNeighbors = 2;
-    const graphUpdateInterval = 50;
+    const graphUpdateInterval = 500;
     const noteLimit = Math.min(9000, processingNotes.length);
+    let lastLinkedIndex = 0;
 
     try {
         for (let i = 0; i < noteLimit; i++) {
@@ -91,42 +117,19 @@ CreateGraphButton.addEventListener("click", async () => {
             const embeddingCacheKey = `${selectedModel}\u0000${projectionDimensions}\u0000${embeddingText}`;
             let noteEmbedding = embeddingCache.get(embeddingCacheKey);
             if (!noteEmbedding) {
-                const embedding = await getEmbedding(embeddingText, selectedModel);
-                noteEmbedding = projectEmbedding(embedding.embeddings[0], projectionDimensions);
+                const embedding = await requestEmbedding(embeddingText, selectedModel);
+                noteEmbedding = projectEmbedding(embedding, projectionDimensions);
                 embeddingCache.set(embeddingCacheKey, noteEmbedding);
             }
             embeddingArr.push(noteEmbedding);
 
-            const nearestNeighbors = [];
-            for (let j = 0; j < i; j++) {
-                const candidate = {
-                    similarity: getCosineSimilarity(embeddingArr[i], embeddingArr[j]),
-                    index: j
-                };
-                const insertionIndex = nearestNeighbors.findIndex(
-                    neighbor => candidate.similarity > neighbor.similarity
-                );
-                if (insertionIndex === -1 && nearestNeighbors.length < totalNeighbors) {
-                    nearestNeighbors.push(candidate);
-                } else if (insertionIndex !== -1) {
-                    nearestNeighbors.splice(insertionIndex, 0, candidate);
-                }
-                if (nearestNeighbors.length > totalNeighbors) {
-                    nearestNeighbors.pop();
-                }
-            }
-
-            for (const neighbor of nearestNeighbors) {
-                linkArrIn.push(i);
-                linkArrOut.push(neighbor.index);
-                linkStrengthArr.push(neighbor.similarity);
-            }
-
             if ((i + 1) % graphUpdateInterval === 0 || i === noteLimit - 1) {
+                linkNewNotes(lastLinkedIndex, i, totalNeighbors);
+                lastLinkedIndex = i + 1;
                 updateGraph3D(graphState, processingNotes, embeddingArr, linkArrIn, linkArrOut, linkStrengthArr);
             }
             document.getElementById("totalEmbeddedNotes").innerHTML = "Total Embedded Notes " + (i + 1);
-            document.getElementById("statusMessage").innerHTML = "Embedding and linking note " + (i + 1) + "...";
+            document.getElementById("statusMessage").innerHTML = "Embedding note " + (i + 1) + "...";
             await new Promise(resolve => requestAnimationFrame(resolve));
         }
     } catch (error) {
@@ -140,6 +143,14 @@ CreateGraphButton.addEventListener("click", async () => {
     computationState = null;
 });
 
+function requestEmbedding(text, model) {
+    const id = nextEmbeddingRequestId++;
+    return new Promise((resolve, reject) => {
+        pendingEmbeddingRequests.set(id, { resolve, reject });
+        embeddingWorker.postMessage({ id, text, model });
+    });
+}
+
 function shuffleNotes(notes) {
     const shuffledNotes = [...notes];
     for (let index = shuffledNotes.length - 1; index > 0; index--) {
@@ -150,6 +161,35 @@ function shuffleNotes(notes) {
         ];
     }
     return shuffledNotes;
+}
+
+function linkNewNotes(fromIndex, toIndex, totalNeighbors) {
+    for (let i = fromIndex; i <= toIndex; i++) {
+        const nearestNeighbors = [];
+        for (let j = 0; j < i; j++) {
+            const candidate = {
+                similarity: getCosineSimilarity(embeddingArr[i], embeddingArr[j]),
+                index: j
+            };
+            const insertionIndex = nearestNeighbors.findIndex(
+                neighbor => candidate.similarity > neighbor.similarity
+            );
+            if (insertionIndex === -1 && nearestNeighbors.length < totalNeighbors) {
+                nearestNeighbors.push(candidate);
+            } else if (insertionIndex !== -1) {
+                nearestNeighbors.splice(insertionIndex, 0, candidate);
+            }
+            if (nearestNeighbors.length > totalNeighbors) {
+                nearestNeighbors.pop();
+            }
+        }
+
+        for (const neighbor of nearestNeighbors) {
+            linkArrIn.push(i);
+            linkArrOut.push(neighbor.index);
+            linkStrengthArr.push(neighbor.similarity);
+        }
+    }
 }
 
 function projectEmbedding(embedding, outputDimensions) {
@@ -202,6 +242,9 @@ function waitForResume(state) {
 
 function createGraph3D(noteArray) {
     const gData = { nodes: [], links: [] };
+    const graphState = {
+        rankedIntervals: []
+    };
     let colorMode = ColorModeChoice.value;
     const graphEl = document.getElementById("graph");
     graphEl.replaceChildren();
@@ -214,9 +257,7 @@ function createGraph3D(noteArray) {
         .nodeColor(node => {
             const interval = Number(node.interval);
             if (colorMode === "gradient") {
-                const rankedIntervals = [...new Set(gData.nodes
-                    .map(currentNode => Number(currentNode.interval))
-                    .filter(Number.isFinite))].sort((first, second) => first - second);
+                const rankedIntervals = graphState.rankedIntervals;
                 const intervalRank = rankedIntervals.indexOf(interval);
                 const relativeInterval = intervalRank > -1 && rankedIntervals.length > 1
                     ? intervalRank / (rankedIntervals.length - 1)
@@ -285,6 +326,7 @@ function createGraph3D(noteArray) {
     return {
         Graph,
         gData,
+        rankedIntervals: graphState.rankedIntervals,
         setColorMode: mode => {
             colorMode = mode;
             Graph.graphData({
@@ -307,6 +349,9 @@ function updateGraph3D(graphState, noteArray, embeddingArray, inLinks, outLinks,
             interval: Number(noteArray[nodeIndex].interval)
         });
     }
+    graphState.rankedIntervals = [...new Set(gData.nodes
+        .map(currentNode => Number(currentNode.interval))
+        .filter(Number.isFinite))].sort((first, second) => first - second);
     gData.links = inLinks.map((source, index) => ({
         source,
         target: outLinks[index],
@@ -316,9 +361,6 @@ function updateGraph3D(graphState, noteArray, embeddingArray, inLinks, outLinks,
     const rankedLinks = [...gData.links].sort((a, b) => b.strength - a.strength);
     rankedLinks.forEach((link, index) => {
         link.rank = index + 1;
-    });
-    gData.links.forEach(link => {
-        link.rank = rankedLinks.indexOf(link) + 1;
     });
     Graph.graphData({
         nodes: [...gData.nodes],
