@@ -13,7 +13,8 @@ const deckInput = document.getElementById("deckChoice");
 const fieldInput = document.getElementById("fieldChoice");
 const alternateCollectionInput = document.getElementById("alternateCollectionChoice");
 const CreateGraphButton = document.getElementById("CreateGraphButton");
-const PauseGraphButton = document.getElementById("PauseGraphButton");
+const PauseNoteAdditionButton = document.getElementById("PauseNoteAdditionButton");
+const PauseAnimationButton = document.getElementById("PauseAnimationButton");
 const ColorModeChoice = document.getElementById("ColorModeChoice");
 const NoteOrderChoice = document.getElementById("NoteOrderChoice");
 const EmbeddingModelChoice = document.getElementById("EmbeddingModelChoice");
@@ -53,23 +54,34 @@ ColorModeChoice.addEventListener("change", () => {
     }
 });
 
-PauseGraphButton.addEventListener("click", () => {
+PauseNoteAdditionButton.addEventListener("click", () => {
     if (!computationState) {
         return;
     }
 
-    computationState.paused = !computationState.paused;
-    PauseGraphButton.textContent = computationState.paused ? "Resume" : "Pause";
-    document.getElementById("statusMessage").innerHTML = computationState.paused
-        ? "Paused"
+    computationState.notesPaused = !computationState.notesPaused;
+    PauseNoteAdditionButton.textContent = computationState.notesPaused
+        ? "Resume note addition"
+        : "Pause note addition";
+    document.getElementById("statusMessage").innerHTML = computationState.notesPaused
+        ? "Note addition paused"
         : "Creating embeddings...";
 
-    if (!computationState.paused) {
+    if (!computationState.notesPaused) {
         for (const resolve of computationState.resumeResolvers) {
             resolve();
         }
         computationState.resumeResolvers.clear();
     }
+});
+
+PauseAnimationButton.addEventListener("click", () => {
+    if (!activeGraphState) {
+        return;
+    }
+
+    const animationPaused = activeGraphState.toggleAnimation();
+    PauseAnimationButton.textContent = animationPaused ? "Resume animation" : "Pause animation";
 });
 
 CreateGraphButton.addEventListener("click", async () => {
@@ -78,11 +90,13 @@ CreateGraphButton.addEventListener("click", async () => {
     }
 
     computationState = {
-        paused: false,
+        notesPaused: false,
         resumeResolvers: new Set()
     };
-    PauseGraphButton.disabled = false;
-    PauseGraphButton.textContent = "Pause";
+    PauseNoteAdditionButton.disabled = false;
+    PauseNoteAdditionButton.textContent = "Pause note addition";
+    PauseAnimationButton.disabled = false;
+    PauseAnimationButton.textContent = "Pause animation";
 
     embeddingArr.length = 0;
     linkStrengthArr.length = 0;
@@ -118,6 +132,7 @@ CreateGraphButton.addEventListener("click", async () => {
             let noteEmbedding = embeddingCache.get(embeddingCacheKey);
             if (!noteEmbedding) {
                 const embedding = await requestEmbedding(embeddingText, selectedModel);
+                await waitForResume(computationState);
                 noteEmbedding = projectEmbedding(embedding, projectionDimensions);
                 embeddingCache.set(embeddingCacheKey, noteEmbedding);
             }
@@ -139,7 +154,8 @@ CreateGraphButton.addEventListener("click", async () => {
 
     graphState.stopAnimation();
     document.getElementById("statusMessage").innerHTML = "Idle...";
-    PauseGraphButton.disabled = true;
+    PauseNoteAdditionButton.disabled = true;
+    PauseNoteAdditionButton.textContent = "Pause note addition";
     computationState = null;
 });
 
@@ -231,7 +247,7 @@ function createProjectionMatrix(inputDimensions, outputDimensions) {
 }
 
 function waitForResume(state) {
-    if (!state.paused) {
+    if (!state.notesPaused) {
         return Promise.resolve();
     }
 
@@ -333,6 +349,15 @@ function createGraph3D(noteArray) {
                 nodes: [...gData.nodes],
                 links: [...gData.links]
             });
+        },
+        toggleAnimation: () => {
+            graphState.animationPaused = !graphState.animationPaused;
+            if (graphState.animationPaused) {
+                Graph.pauseAnimation();
+            } else {
+                Graph.resumeAnimation();
+            }
+            return graphState.animationPaused;
         },
         stopAnimation: () => {
             animating = false;
